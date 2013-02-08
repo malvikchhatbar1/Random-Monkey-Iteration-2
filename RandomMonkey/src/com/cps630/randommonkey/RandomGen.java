@@ -4,11 +4,21 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.app.Activity;
+import android.app.ProgressDialog;
+import android.util.Log;
+import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -22,28 +32,43 @@ public class RandomGen extends Activity {
 	Button show;
 	Button pause;
 	Button exit;
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_random_gen);
-        
-        tv =(TextView)findViewById(R.id.textView1);
-        show = (Button)findViewById(R.id.button1);
-        pause = (Button)findViewById(R.id.button2);
-        exit = (Button)findViewById(R.id.button3);
-		
+	String pauseFlag;
+	
+    final ArrayList<String> facts = new ArrayList<String>();
+	private class LoadJsonTask extends AsyncTask<String, Void, ArrayList<String> > {
+	       ProgressDialog dialog ;
+	       protected void onPreExecute (){
+	            dialog = ProgressDialog.show(RandomGen.this ,"Random Monkey","Getting FACTS!!!");
 
-        tv.setVisibility(0);
-        show.setVisibility(0);
-        pause.setVisibility(4);
-        
-		show.setOnClickListener(new View.OnClickListener() 
+	       }
+	       protected ArrayList<String> doInBackground (String... params){
+	           return doGetJson(params[0]);
+	       }
+	       protected void onPostExecute(ArrayList<String> mylist){
+	            dialog.dismiss();
+	       }
+	    }
+	
+	public ArrayList<String> doGetJson(String url) 
+    {
+	    //JSONArray json = JSONfunctions.getJSONfromURL("http://10.0.2.2:3000/facts.json");
+	    JSONArray json = JSONfunctions.getJSONfromURL(url);
+	    try{
+	        for(int i=0;i<json.length();i++){
+				JSONObject e = json.getJSONObject(i);
+				facts.add(e.getString("fact"));
+				Collections.shuffle(facts);
+			}		
+	    }catch(JSONException e)        {
+	    	 Log.e("log_tag", "Error parsing data "+e.toString());
+	    }
+	    show.setOnClickListener(new View.OnClickListener() 
 		{
             @Override
             public void onClick(View v) 
             {
             	
-            	InputStreamReader reader1 = null;
+            	/*InputStreamReader reader1 = null;
 				try {
 					reader1 = new InputStreamReader(getAssets().open("facts.txt"));
 				} catch (IOException e2) {
@@ -51,13 +76,6 @@ public class RandomGen extends Activity {
 					e2.printStackTrace();
 				}
                 BufferedReader reader = new BufferedReader(reader1);
-                // Read in the file into a list of strings
-        		/*try {
-        			reader = new BufferedReader(new FileReader("facts.txt"));
-        		} catch (FileNotFoundException e1) {
-        			// TODO Auto-generated catch block
-        			e1.printStackTrace();
-        		}*/
 			    List<String> lines = new ArrayList<String>();
 			
 			    String line = null;
@@ -75,22 +93,44 @@ public class RandomGen extends Activity {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-			    }
-			
+			    }*/
+				
 			    // Choose a random one from the list
 			    Random r = new Random();
-			    int arraySize = lines.size();
-			    String randomString = lines.get(r.nextInt(arraySize));
+			    int arraySize = facts.size();
+			    String randomString = facts.get(r.nextInt(arraySize));
 			    tv.setText(randomString);
 			    tv.setVisibility(0);
             }
 		});
+	    return facts;
+    }
+	
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+    	super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_random_gen);
+        
+        tv =(TextView)findViewById(R.id.textView1);
+        show = (Button)findViewById(R.id.button1);
+        pause = (Button)findViewById(R.id.button2);
+        exit = (Button)findViewById(R.id.button3);
+		
+
+        tv.setVisibility(0);
+        show.setVisibility(0);
+        pause.setVisibility(4);
+
+        /**Stuff was here**/
+
+        new LoadJsonTask().execute("http://10.0.2.2:3000/facts.json");
 		
 		pause.setOnClickListener(new View.OnClickListener() 
 		{
             @Override
             public void onClick(View v) 
             {
+            	pauseFlag = "pause";
             	pause.setVisibility(4);
             	show.setVisibility(0);
             }
@@ -126,17 +166,49 @@ public class RandomGen extends Activity {
 			int duration = Toast.LENGTH_LONG;
 
 			Toast toast = Toast.makeText(getApplicationContext(), text, duration);
+			toast.setGravity(Gravity.CENTER, 0, 0);
 			toast.show();
 			break;
 	
 			case R.id.autoPlay:
 			CharSequence text1 = "AutoPlay will now begin! Use Pause to stop AutoPlay.";
 			int duration1 = Toast.LENGTH_SHORT;
-
+        	pauseFlag="play";
 		    pause.setVisibility(0);
+		    show.setVisibility(4);
 			Toast toast1 = Toast.makeText(getApplicationContext(), text1, duration1);
+			toast1.setGravity(Gravity.CENTER, 0, 0);
 			toast1.show();
-			
+		    tv.setVisibility(0);
+		    new Thread(new Runnable(){
+		        public void run() 
+		        {
+			        // TODO Auto-generated method stub
+					Random r = new Random();
+				    int arraySize = facts.size();
+			        while(pauseFlag.equals("play"))
+			        {
+			        	try 
+			        	{
+			        		final String randomString = facts.get(r.nextInt(arraySize));
+							runOnUiThread(new Runnable() 
+							{
+							    public void run() 
+							    {
+								    tv.setText(randomString);
+							    }
+							});
+						    Thread.sleep(4000);
+						    
+			        	} 
+			        	catch (InterruptedException e) 
+			        	{
+			        		// TODO Auto-generated catch block
+						    e.printStackTrace();
+			        	} 
+		        	}
+                }
+		    }).start();
 			break;
 	
 			case R.id.preferences:
@@ -144,6 +216,7 @@ public class RandomGen extends Activity {
 			int duration2 = Toast.LENGTH_SHORT;
 
 			Toast toast2 = Toast.makeText(getApplicationContext(), text2, duration2);
+			toast2.setGravity(Gravity.CENTER, 0, 0);
 			toast2.show();
 			break;
 		}
